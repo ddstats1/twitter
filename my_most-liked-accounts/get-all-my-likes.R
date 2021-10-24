@@ -1,0 +1,148 @@
+
+library(tidyverse)
+library(rtweet)
+library(here)
+library(lubridate)
+
+# using example from https://github.com/ropensci/rtweet/issues/200
+
+# want a specific user's favorite tweets (all of them)
+# batch request sequentially, eg sliding interval
+
+user <- "daniel_dulaney"
+
+n_fav <- lookup_users(users = user)$favourites_count
+
+n_batches <- round(n_fav / 2000)
+
+n_last_batch <- n_fav %% 2000
+
+last_like_id <- get_favorites(user = user, n = 1) %>% 
+  select(status_id) %>% 
+  pull()
+
+# cycle through my 42,000+ favorites, tracking each one's date created (when i liked it) and account created by
+# (who i liked)
+
+# note that get_favorites cab only grab 3000 at a time. i'll try 2,000 at a time here. that means there's 
+# gonna be 13 batches of 2000, 1 batch of 799
+
+# set up empty df formatted like the get_favorites() outcome
+all_likes <- 
+  get_favorites(user = user, n = 1) %>% 
+  filter(user_id == 12345)
+
+for (i in 1:n_batches) {
+  
+  # first batch needs max_id = overall_max ID (not from a batch like 2 through n-1 needs)
+  if (i == 1) {
+    
+    batch_likes <- get_favorites(user = user, n = 2000, max_id = last_like_id)
+    
+  }
+  
+  # last batch should just be n = n_batches
+  else if (i == n_batches) {
+    
+    latest_id <- get_favorites(user = user, n = 1)
+    
+  }
+  
+  # batches 2 through n-1 should be n = 2000 & max_id = (the oldest (i.e. earliest in time) status_id from the previous batch)
+  else {
+    
+    batch_likes <- get_favorites(user = user, n = 2000, max_id = earliest_batch_like)
+    
+  }
+  
+  # save earliest tweet ID from each batch so can set that as the max ID for the next batch
+  earliest_batch_like <- batch_likes$status_id %>% min()
+  
+  # rbind onto all_likes df
+  all_likes <- rbind(all_likes, batch_likes)
+  
+}
+
+
+# get id of single most recent tweet (as baseline to work backwards)
+
+batch_0 <- get_favorites(user = user, n = 1)
+
+batch_0$status_id %>% min()
+batch_0$status_id %>% max()
+id_0 <- batch_0$status_id
+
+# tried diff combos of since_id/max_id = min/max, none get desired behavior
+# from r package doc and twitter api doc, 
+# 'max_id' should be what we want to use as interval slider
+
+# from baseline, get older 1000 tweets
+batch_1 <- rtweet::get_favorites(user=user,
+                                n = 1000,
+                                max_id=id_0)
+
+# what exactly do we want from batch_1?
+# - Account liked
+# - Date liked
+
+batch_1 %>% 
+  select(screen_name, created_at) %>% 
+  View()
+
+min_1 <- batch_1$status_id %>% min()
+max_1 <- batch_1$status_id %>% max()
+min_1
+max_1
+
+# start from 'most recent'
+# batch iterate backwards 
+# to full set ending at 'oldest'
+
+# expect previous 'min' to be current 'max', then look backwards
+# want next 1000 favorited tweets
+
+# max_id	
+# Returns results with status_id less (older) than or equal to (if hit limit) the specified status_id
+
+batch_2 <- rtweet::get_favorites(user = user,
+                                 n = 1000,
+                                 max_id = min_1)
+
+# check count of likes by date for batches 1 and 2 
+batch_1 %>% 
+  mutate(created_clean = str_sub(created_at, 1, 10)) %>% 
+  count(created_clean) %>% View()
+
+batch_2 %>% 
+  mutate(created_clean = str_sub(created_at, 1, 10)) %>% 
+  count(created_clean) %>% View()
+
+# looks good! batch 1 is latest 1000, batch 2 is the 1000 before that
+
+min_2 = batch_2$status_id %>% min()
+max_2 = batch_2$status_id %>% max()
+
+id_0
+
+min_1
+max_1
+
+min_2
+max_2
+
+# not expected behavior
+
+# is this because 'status_id' is not for the target user's favorite list
+# is it referencing the 'original'source' tweet's status_id that the target user has favorited?
+
+library(dplyr)
+
+fave_user = bind_rows(batch_0,
+                      batch_1,
+                      batch_2) %>%
+  distinct(status_id, user_id, .keep_all = TRUE)
+
+dim(fave_user)
+
+# should expect close to 2000 distinct rows
+

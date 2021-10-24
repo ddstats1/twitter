@@ -1,0 +1,92 @@
+---
+title: "Sentiment Analysis of Tweets about Bernie"
+subtitle: ""
+output:
+  github_document
+allow_html: true
+editor_options:
+  chunk_output_type: console
+---
+  
+## Setup
+
+```{r libs}
+
+library(tidyverse)
+library(here)
+library(rtweet)
+library(tidytext)
+
+```
+
+```{r theme_chunk_opts}
+
+theme_set(theme_light())
+
+knitr::opts_chunk$set(message = FALSE,
+                      warning = FALSE,
+                      fig.width = 10,
+                      fig.height = 7)
+
+```
+
+### Sentiments behind tweets containing "Bernie"/"Sanders" and "socialist"/"socialism"
+
+I'm curious about the sentiments in tweets that mention Bernie and socialist/socialism-- are more people deriding his socialist tendencies or supporting them?
+
+```{r bernie_socialist_info}
+
+bernie_socialist_info <- search_tweets(q = "bernie socialist",
+                                       n = 10000,
+                                       include_rts = FALSE, 
+                                       #type = "popular",
+                                       retryonratelimit = TRUE)
+
+
+```
+
+```{r}
+
+bernie_socialist_info %>% 
+  select(user_id, status_id, screen_name, text) %>% 
+  unnest_tokens(output = word, input = text) %>% 
+  filter(!word %in% stop_words$word) %>% 
+  View()
+  
+```
+
+### Sentiments from specific users
+
+Next, I'll look at tweets from people who I consider to be Leftists, Centrists, and Right-Wingers and figure out the sentiments in their tweets about Bernie.
+
+**Leftist**
+
+- Jordan Uhl ()
+- Ken Klippenstein ()
+- Jacobin Mag ()
+
+**Centrist**
+
+- Jennifer Rubin (@JRubinBlogger)
+- Jake Tapper ()
+- CNN
+
+**Right-Wing**
+
+- Charlie Kirk ()
+- Dan Bongino ()
+- Ben Shapiro ()
+
+
+```{r}
+
+
+
+```
+
+
+
+
+
+
+
