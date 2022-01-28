@@ -1,0 +1,131 @@
+---
+title: ""
+subtitle: ""
+output: html_document
+always_allow_html: true
+editor_options:
+  chunk_output_type: console
+---
+
+```{r}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(here)
+library(lubridate)
+library(ddplot)
+library(ggrepel)
+theme_set(theme_light())
+```
+
+```{r}
+my_likes_raw <- read_csv(here("my_most-liked-accounts", "data", "likes_df.csv"))
+
+my_likes <- read_csv(here("my_most-liked-accounts", "data", "likes_df.csv")) %>% 
+  mutate(date_tweeted = date(created_at),
+         year_tweeted = year(date_tweeted),
+         month_tweeted = month(date_tweeted),
+         month_year_tweeted = str_sub(created_at, 1, 7))
+```
+
+Remember: `created_at` is the date of the tweet, not when I liked it!
+
+```{r}
+# number of likes by month-year
+by_month_yr_totals <- my_likes %>% 
+  count(month_year_tweeted, year_tweeted, month_tweeted, name = "n_likes")
+
+# for nice x-axis breaks
+break_months <- by_month_yr_totals %>% 
+  filter(str_detect(month_year_tweeted, "-01")) %>% 
+  pull(month_year_tweeted)
+
+by_month_yr_totals %>% 
+  ggplot(aes(month_year_tweeted, n_likes)) +
+  geom_col() +
+  #geom_vline(aes(xintercept = break_months)) +
+  scale_x_discrete(breaks = break_months)
+```
+
+```{r}
+# cumulative likes for each account i've liked, by month-year. will then
+# time lapse using month-year
+
+# can just get totals by account & month-year, then cumsum() them?
+
+# only wanna plot top n total liked accounts
+top_accts_df <- my_likes %>% 
+  count(screen_name, sort = T) %>% 
+  mutate(rank = row_number(),
+         category = NA) %>% 
+  slice(1:100)
+
+top_accts_vec <- top_accts_df %>% 
+  pull(screen_name)
+
+# write out top accts so can add a "category" tag for each one (politics, baseball, GSW/basketball)
+write_csv(top_accts_df, here("my_most-liked-accounts", "data", "top_accts_df.csv"))
+
+by_acct_mth_yr <- my_likes %>% 
+  filter(screen_name %in% top_accts_vec) %>% 
+  count(screen_name, month_year_tweeted, name = "n_likes")
+
+# think i'll need to fill in 0's for missing months?
+
+# could create an empty with every comnbo of month-year & account, then left join
+# onto this guy
+dist_month_years <- my_likes %>% 
+  distinct(month_year_tweeted) %>% 
+  pull()
+
+acct_date_grid <- expand_grid(screen_name = top_accts, 
+                              month_year_tweeted = dist_month_years)
+
+by_acct_cumul <- acct_date_grid %>% 
+  left_join(by_acct_mth_yr, by = c("screen_name", "month_year_tweeted")) %>%
+  arrange(screen_name, month_year_tweeted) %>% 
+  # fill in no-like months with 0's
+  mutate(n_likes = ifelse(is.na(n_likes), 0, n_likes)) %>% 
+  group_by(screen_name) %>% 
+  mutate(tot_likes = cumsum(n_likes)) %>% 
+  ungroup()
+```
+
+```{r}
+# bar chart race of most liked accounts
+by_acct_cumul %>% 
+  ddplot::barChartRace(
+    x = "tot_likes",
+    y = "screen_name",
+    time = "month_year_tweeted"
+)
+```
+
+Pretty, but tough to follow with this many accts
+
+```{r}
+# top 50 accts cumulative static line plot
+by_acct_cumul %>% 
+  ggplot(aes(month_year_tweeted, tot_likes, color = screen_name, group = 1)) +
+  geom_path() +
+  geom_label_repel() +
+  ggeasy::easy_remove_legend()
+  
+# could color by category (lefty, baseball, basketball, misc)  
+```
+
+```{r}
+# overall most liked accounts
+likes_by_acc_overall
+```
+
+```{r}
+# most liked by year
+```
+
+
+
+
+
